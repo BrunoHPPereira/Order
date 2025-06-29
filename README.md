@@ -14,8 +14,6 @@ Desenvolver um serviço robusto e escalável para:
 - 📊 Agregar totais por pedido
 - 💾 Persistir os resultados no **MongoDB**
 
-> Capacidade estimada: **até 2 milhões de registros/dia**, com alta performance.
-
 ---
 
 ## ⚙️ Funcionalidades
@@ -138,7 +136,7 @@ db.orders_review.find({ status: "nao processado" }).pretty()
 
 ---
 
-## 📚 Tabela de Regras Tributárias
+## 📚 Regras Tributárias
 
 ```python
 PRODUCT_TAX_RULES = {
