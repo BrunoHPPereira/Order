@@ -1,154 +1,218 @@
+
 # 🧾 Order Ambev – Processamento Tributário com Python, Polars e MongoDB
 
-Este projeto é um microserviço Python que realiza o **processamento tributário de pedidos** a partir de arquivos Excel, utilizando a biblioteca **Polars (Lazy)** para alta performance e **MongoDB** para persistência dos dados.
+Este projeto é um microserviço em **Python** que realiza o **processamento tributário de pedidos** com base em arquivos Excel, utilizando **Polars (Lazy)** para desempenho otimizado e **MongoDB** para persistência dos dados.
 
 ---
 
 ## 🎯 Objetivo
 
 Desenvolver um serviço robusto e escalável para:
-- 📥 Ler pedidos de arquivos Excel
-- 🧮 Calcular impostos com base na nova **reforma tributária**
-- 📊 Calcular totais por pedido
-- 💾 Persistir os dados processados no **MongoDB**
 
-> Capaz de lidar com **até 2 milhões de registros/dia** com performance otimizada.
+- 📥 Ler arquivos Excel contendo pedidos
+- 🧮 Calcular os impostos (IBS e CBS) conforme a nova **reforma tributária**
+- 📊 Agregar totais por pedido
+- 💾 Persistir os resultados no **MongoDB**
+
+> Capacidade estimada: **até 2 milhões de registros/dia**, com alta performance.
 
 ---
 
 ## ⚙️ Funcionalidades
 
-- ✅ Leitura eficiente com Polars Lazy
-- ✅ Cálculo de impostos IBS e CBS por item
+- ✅ Leitura eficiente de planilhas com **Polars Lazy**
+- ✅ Cálculo item a item dos tributos (IBS e CBS)
+- ✅ Validação de regras por **origem, destino e categoria**
 - ✅ Agrupamento e somatório por pedido
-- ✅ Armazenamento dos resultados no MongoDB
-- ✅ Modular, simples e pronto para extensões REST
+- ✅ Armazenamento em coleções distintas para pedidos **processados** e **não processados**
+- ✅ Arquitetura modular, ideal para ser estendida como microserviço REST
 
 ---
 
-## 📁 Estrutura
+## 📁 Estrutura do Projeto
 
-order_service.py # Código principal consolidado
-requirements.txt # Dependências do projeto
-pedidos.xlsx # Exemplo de planilha de entrada
-.env # Variáveis de ambiente (MONGO_URI)
-README.md # Este arquivo
+```text
+order/
+├── app.py                 # Entrada principal do sistema
+├── config.py              # Configurações de ambiente (como URI do MongoDB)
+├── db.py                  # Conexão e manipulação com MongoDB
+├── models.py              # Modelo de estrutura de documento no banco
+├── processor.py           # Processamento dos pedidos e cálculo dos impostos
+├── tax_rules.py           # Regras de imposto por categoria/origem/destino
+├── requirements.txt       # Lista de dependências
+├── .env                   # Variáveis de ambiente (ex: MONGO_URI)
+├── data/
+│   └── pedidos.xlsx       # Planilha de pedidos de entrada
+├── README.md              # Documentação do projeto
+```
 
-----
-2. Crie o arquivo .env
+---
 
-    MONGO_URI=mongodb://localhost:27017---
+## ▶️ Como Executar
 
-▶️ Execução
+### 1. Configure o `.env`
 
-1. Insira a planilha de pedidos na pastsa Data
- - A planilha deve conter as seguintes colunas
-   - pedido_id
-   - produto
-   - categoria
-   - preco_unitario
-   - quantidade
+Crie um arquivo `.env` com o seguinte conteúdo:
 
-2. Rode o serviço
-   - python order_service.py
+```dotenv
+MONGO_URI=mongodb://localhost:27017
+```
 
-3. Você verá no terminal:
-📥 Lendo arquivo Excel...
-✅ Processamento finalizado: 3 pedidos inseridos no MongoDB.
+---
 
-4. 💾 MongoDB – Exemplo de Documento Armazenado
-json
-Copiar
-Editar
+### 2. Prepare a planilha de entrada
+
+Coloque sua planilha `.xlsx` na pasta `data/` com as seguintes colunas obrigatórias:
+
+- `pedido_id`
+- `produto`
+- `categoria`
+- `preco_unitario`
+- `quantidade`
+- `origem`
+- `destino`
+
+---
+
+### 3. Execute o serviço
+
+```bash
+python app.py
+```
+
+Você verá logs como:
+
+```
+[2025-06-29 21:41:58] INFO: Lendo arquivo Excel...
+[2025-06-29 21:42:01] INFO: Pedido 190 processado e inserido com sucesso.
+[2025-06-29 21:42:03] INFO: ✔️ Total de pedidos processados: 872
+[2025-06-29 21:42:03] INFO: ❌ Total de pedidos não processados: 128
+```
+
+---
+
+### 4. Verifique no MongoDB
+
+No terminal do MongoDB:
+
+```js
+use order_service
+db.orders.find().pretty()
+db.orders_review.find({ status: "nao processado" }).pretty()
+```
+
+---
+
+## 💡 Exemplo de Documento Salvo
+
+```json
 {
-  "pedido_id": 1,
-  "data_processamento": "2025-06-28T14:03:00Z",
+  "pedido_id": 190,
+  "data_processamento": "2025-06-29T21:41:58.235Z",
   "itens": [
     {
-      "produto": "Notebook",
-      "categoria": "Eletronico",
-      "quantidade": 2,
-      "preco_unitario": 3000,
-      "valor_bruto": 6000,
-      "valor_ibs": 720,
-      "valor_cbs": 540
-    },
-    {
-      "produto": "Fone Bluetooth",
-      "categoria": "Eletronico",
-      "quantidade": 1,
-      "preco_unitario": 200,
-      "valor_bruto": 200,
-      "valor_ibs": 24,
-      "valor_cbs": 18
+      "produto": "Brahma",
+      "categoria": "Lata 350 ml",
+      "quantidade": 8,
+      "preco_unitario": 3.7,
+      "origem": "SP",
+      "destino": "SP",
+      "valor_bruto": 29.6,
+      "valor_ibs": 3.55,
+      "valor_cbs": 2.66,
+      "valor_total": 35.82,
+      "taxa_localizada": true,
+      "status": "processado"
     }
   ],
-  "total_pedido": 6200,
+  "total_pedido": 356.66,
+  "origem": "SP",
+  "destino": "SP",
   "impostos_totais": {
-    "ibs": 744,
-    "cbs": 558
+    "ibs": 59.96,
+    "cbs": 42.87
   },
   "status": "processado"
 }
-
-
-5. 🧪 Verificar no MongoDB
-Via terminal:
-
-> use order_service
-> db.orders.find().pretty()
-
-
-## 📚 Regras Tributárias
-
-| Categoria          | IBS (%) | CBS (%) |
-|--------------------|---------|---------|
-| Lata 350 ml        | 12%     | 9%      |
-| Garrafa 350 ml     | 5%      | 2%      |
-| Lata 473 ml        | 0%      | 0%      |
-| Lata sem alcool    | 10%     | 4%      |
+```
 
 ---
 
-## 💻 Instalação
+## 📚 Tabela de Regras Tributárias
 
-### 1. Clone o projeto
+```python
+PRODUCT_TAX_RULES = {
+  "lata 350 ml": {
+    ("SP", "SP"): {"ibs": 0.12, "cbs": 0.09},
+    ("SP", "RJ"): {"ibs": 0.15, "cbs": 0.10},
+    ("SP", "PR"): {"ibs": 0.09, "cbs": 0.08}
+  },
+  "garrafa 350 ml": {
+    ("SP", "SP"): {"ibs": 0.05, "cbs": 0.02},
+    ("SP", "RJ"): {"ibs": 0.07, "cbs": 0.03}
+  },
+  "lata 473 ml": {
+    ("SP", "SP"): {"ibs": 0.00, "cbs": 0.00},
+    ("SP", "RJ"): {"ibs": 0.01, "cbs": 0.01}
+  },
+  "lata sem alcool": {
+    ("SP", "SP"): {"ibs": 0.10, "cbs": 0.40},
+    ("SP", "RJ"): {"ibs": 0.12, "cbs": 0.45}
+  }
+}
+```
 
-```bash
-git clone https://github.com/seuusuario/order-ambev.git
-cd order-service
+---
 
+## 🛠 Desenho Técnico
 
-
-Desenho tecnico
+```text
 ┌─────────────────────┐
-│  pedidos.xlsx       │
+│   pedidos.xlsx      │
 └────────┬────────────┘
          │
          ▼
-┌─────────────────────┐
-│ Polars Lazy (Leitura│
-│ e transformação)    │
-└────────┬────────────┘
+┌─────────────────────────────┐
+│ Polars Lazy (leitura e      │
+│ transformação de dados)     │
+└────────┬────────────────────┘
          ▼
-┌─────────────────────┐
-│ Aplicação de regras │ ← tax_rules
-│ tributárias (IBS/CBS│
-└────────┬────────────┘
+┌─────────────────────────────┐
+│ Aplicação de Regras Fiscais │
+│ via tax_rules.py            │
+└────────┬────────────────────┘
          ▼
-┌─────────────────────┐
-│ Agrupamento por     │
-│ pedido_id e cálculo │
-└────────┬────────────┘
+┌─────────────────────────────┐
+│ Agrupamento e Totais        │
+│ por pedido_id               │
+└────────┬────────────────────┘
          ▼
-┌─────────────────────┐
-│ Persistência no     │
-│ MongoDB (JSON)      │
-└─────────────────────┘
+┌─────────────────────────────┐
+│ Armazenamento MongoDB       │
+│ - db.orders (válidos)       │
+│ - db.orders_review (falha)  │
+└─────────────────────────────┘
+```
 
+---
 
-🧑‍💻 Autor
-Bruno Henrique
-📧 bruno.dkhenrique@gmail.com
-🔗 bruno-pereira-220522
-🔗 [Seu GitHub]
+## 👤 Autor
+
+| Nome             | Contato                             |
+|------------------|--------------------------------------|
+| Bruno Henrique   | 📧 bruno.dkhenrique@gmail.com         |
+| [LinkedIn](https://linkedin.com/in/bruno-pereira-220522) | [GitHub](https://github.com/BrunoHPPereira/Order) |
+
+---
+
+## 📦 Requisitos
+
+```bash
+pip install -r requirements.txt
+```
+
+Inclui:
+- `polars`
+- `pymongo`
+- `python-dotenv`
+- `openpyxl`
