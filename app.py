@@ -9,7 +9,7 @@ import logger_config
 logger = logging.getLogger(__name__)
 
 # --- Configuração de diretórios ---
-DATA_DIR = Path("Data")
+DATA_DIR = Path("data")
 INPUT_DIR = DATA_DIR / "input"
 PROCESSED_DIR = DATA_DIR / "processed"
 ERROR_DIR = DATA_DIR / "error"
@@ -29,12 +29,15 @@ def get_excel_files() -> list[Path]:
 def handle_file(file: Path):
     """Processa um único arquivo, movendo-o após o processamento."""
     try:
-        process_order_file(str(file), str(ERROR_DIR))
+        process_order_file(str(file))
         dest = PROCESSED_DIR / file.name
         file.replace(dest)
         logger.info(f"📁 Arquivo movido para: {dest}")
     except Exception as e:
         logger.exception(f"❌ Erro ao processar {file.name}: {e}")
+        dest = ERROR_DIR / file.name
+        file.replace(dest)
+        logger.info(f"📁 Arquivo movido para: {dest}")
         # Se for erro de estrutura, o processor já move para error_dir
 
 
@@ -46,7 +49,7 @@ def main():
     files = get_excel_files()
 
     if not files:
-        logger.warning("⚠️ Nenhum arquivo .xlsx ou .xls encontrado na pasta 'Data/input/'.")
+        logger.warning("⚠️ Nenhum arquivo .xlsx ou .xls encontrado na pasta 'data/input/'.")
         return
 
     for file in files:
