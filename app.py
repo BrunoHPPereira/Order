@@ -1,17 +1,19 @@
 from processor import process_order_file
 from pathlib import Path
 import time
+from itertools import chain
 
 def main():
     print("📦 Iniciando processamento de pedidos...")
 
     start_time = time.time()
-
     data_dir = Path("Data")
-    excel_files = list(data_dir.glob("*.xlsx"))
+
+    # Busca arquivos .xlsx e .xls
+    excel_files = list(chain(data_dir.glob("*.xlsx"), data_dir.glob("*.xls")))
 
     if not excel_files:
-        print("⚠️ Nenhum arquivo encontrado na pasta 'Data/'.")
+        print("⚠️ Nenhum arquivo .xlsx ou .xls encontrado na pasta 'Data/'.")
         return
 
     for file in excel_files:
