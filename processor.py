@@ -1,5 +1,4 @@
 import shutil
-
 import polars as pl
 from tax_rules import get_tax_rates
 from models import build_order_document
@@ -47,11 +46,11 @@ def apply_tax_to_row(row: dict) -> dict:
     total_value = gross_value + ibs_value + cbs_value
     return {
         **row,
-        "gross_value": round(gross_value, 2),
-        "ibs_value": round(ibs_value, 2),
-        "cbs_value": round(cbs_value, 2),
-        "total_value": round(total_value, 2),
-        "tax_found": found,
+        "valor_bruto": round(gross_value, 2),
+        "valor_ibs": round(ibs_value, 2),
+        "valor_cbs": round(cbs_value, 2),
+        "valor_total": round(total_value, 2),
+        "taxa_localizada": found,
         "status": "processado" if found else "nao processado"
     }
 
@@ -73,9 +72,9 @@ def organize_orders(rows: list[dict]) -> tuple[dict, set[str]]:
             }
 
         orders_dict[pid]["items"].append(item)
-        orders_dict[pid]["total"] += item["total_value"]
-        orders_dict[pid]["ibs"] += item["ibs_value"]
-        orders_dict[pid]["cbs"] += item["cbs_value"]
+        orders_dict[pid]["total"] += item["valor_bruto"]
+        orders_dict[pid]["ibs"] += item["valor_ibs"]
+        orders_dict[pid]["cbs"] += item["valor_cbs"]
 
         if item["status"] == "nao processado":
             orders_dict[pid]["status"] = "nao processado"
