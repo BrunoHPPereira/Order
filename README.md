@@ -40,7 +40,9 @@ order/
 ├── requirements.txt       # Lista de dependências
 ├── .env                   # Variáveis de ambiente (ex: MONGO_URI)
 ├── data/
-│   └── pedidos.xlsx       # Planilha de pedidos de entrada
+    └── input/# Planilhas de pedidos de entrada
+    └── processed/ #Planilhas processadas
+    └── error/ #Planilhas com erro de estrutura
 ├── README.md              # Documentação do projeto
 ```
 

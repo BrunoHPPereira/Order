@@ -1,8 +1,10 @@
+import shutil
+
 import polars as pl
 from tax_rules import get_tax_rates
 from models import build_order_document
 from db import get_db_collection, get_db_collection_review
-import logging
+from logger_config import *
 
 
 logger = logging.getLogger(__name__)
@@ -13,22 +15,25 @@ REQUIRED_COLUMNS = {
     "quantidade", "preco_unitario", "origem", "destino"
 }
 
-def validate_excel_structure(filepath,df: pl.DataFrame):
+def validate_excel_structure(filepath,df: pl.DataFrame,error_dir):
     """Valida se o DataFrame possui todas as colunas obrigatórias."""
     existing_cols = set(df.columns)
     missing = REQUIRED_COLUMNS - existing_cols
     if missing:
+        shutil.move(filepath,error_dir)
+        logger.info( f"❌ Excel inválido. Colunas ausentes: {', '.join(missing)}. "
+            f"Esperadas: {', '.join(REQUIRED_COLUMNS)}")
         raise ValueError(
             f"❌ Excel inválido. Colunas ausentes: {', '.join(missing)}. "
             f"Esperadas: {', '.join(REQUIRED_COLUMNS)}"
         )
     logger.info("✅ Estrutura do Excel validada com sucesso.")
 
-def read_orders(filepath: str) -> list[dict]:
+def read_orders(filepath: str,error_dir) -> list[dict]:
     """Lê e valida o arquivo Excel utilizando função lazy, retornando como lista de dicionários."""
     logger.info(f"📥 Lendo arquivo: {filepath}")
     df = pl.read_excel(filepath)
-    validate_excel_structure(filepath,df)
+    validate_excel_structure(filepath,df,error_dir)
     return df.lazy().collect().to_dicts()
 
 
@@ -111,12 +116,12 @@ def persist_orders(orders_dict: dict, review_set: set[str]):
     logger.info(f"❌ Pedidos em revisão: {len(review_set)}")
 
 
-def process_order_file(filepath: str):
+def process_order_file(filepath: str,error_dir):
     """Pipeline principal de leitura, processamento e persistência de dados.
     📌 Podemos aplicar multithread caso necessário utilizando ProcessPoolExecutor na função apply_tax_to_row
     devemos apenas se atentar com o usage do CPU, sendo necessária uma avaliação mais detalhada."""
 
-    raw_rows = read_orders(filepath)
+    raw_rows = read_orders(filepath,error_dir)
     logger.info(f"📄 Linhas lidas: {len(raw_rows)}")
     processed_rows = [apply_tax_to_row(row) for row in raw_rows]
     orders_dict, review_list = organize_orders(processed_rows)
