@@ -3,13 +3,9 @@ from tax_rules import get_tax_rates
 from models import build_order_document
 from db import get_db_collection, get_db_collection_review
 import logging
+import shutil
 
-# Logging configurado
-logging.basicConfig(
-    level=logging.INFO,
-    format='[%(asctime)s] %(levelname)s: %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
+
 logger = logging.getLogger(__name__)
 
 
@@ -18,11 +14,12 @@ REQUIRED_COLUMNS = {
     "quantidade", "preco_unitario", "origem", "destino"
 }
 
-def validate_excel_structure(df: pl.DataFrame):
+def validate_excel_structure(filepath,df: pl.DataFrame):
     """Valida se o DataFrame possui todas as colunas obrigatórias."""
     existing_cols = set(df.columns)
     missing = REQUIRED_COLUMNS - existing_cols
     if missing:
+        shutil.move(filepath, 'Data/Error')
         raise ValueError(
             f"❌ Excel inválido. Colunas ausentes: {', '.join(missing)}. "
             f"Esperadas: {', '.join(REQUIRED_COLUMNS)}"
@@ -33,7 +30,7 @@ def read_orders(filepath: str) -> list[dict]:
     """Lê e valida o arquivo Excel utilizando função lazy, retornando como lista de dicionários."""
     logger.info(f"📥 Lendo arquivo: {filepath}")
     df = pl.read_excel(filepath)
-    validate_excel_structure(df)
+    validate_excel_structure(filepath,df)
     return df.lazy().collect().to_dicts()
 
 
