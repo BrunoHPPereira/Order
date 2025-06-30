@@ -3,7 +3,6 @@ from tax_rules import get_tax_rates
 from models import build_order_document
 from db import get_db_collection, get_db_collection_review
 import logging
-import shutil
 
 
 logger = logging.getLogger(__name__)
@@ -19,7 +18,6 @@ def validate_excel_structure(filepath,df: pl.DataFrame):
     existing_cols = set(df.columns)
     missing = REQUIRED_COLUMNS - existing_cols
     if missing:
-        shutil.move(filepath, 'Data/Error')
         raise ValueError(
             f"❌ Excel inválido. Colunas ausentes: {', '.join(missing)}. "
             f"Esperadas: {', '.join(REQUIRED_COLUMNS)}"
