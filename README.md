@@ -166,7 +166,7 @@ PRODUCT_TAX_RULES = {
 ---
 
 ## 🛠 Desenho Técnico
-![img.png](img.png)
+![img.png](docs/img.png)
 
 ---
 
