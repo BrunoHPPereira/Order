@@ -43,6 +43,7 @@ order/
     └── input/# Planilhas de pedidos de entrada
     └── processed/ #Planilhas processadas
     └── error/ #Planilhas com erro de estrutura
+├── logs/ # Pasta de logs
 ├── README.md              # Documentação do projeto
 ```
 
