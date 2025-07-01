@@ -38,7 +38,6 @@ def handle_file(file: Path):
         dest = ERROR_DIR / file.name
         file.replace(dest)
         logger.info(f"📁 Arquivo movido para: {dest}")
-        # Se for erro de estrutura, o processor já move para error_dir
 
 
 def main():

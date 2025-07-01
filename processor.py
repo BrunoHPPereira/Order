@@ -1,126 +1,122 @@
-import shutil
+import logging
+from pymongo.errors import BulkWriteError
+from more_itertools import chunked
 import polars as pl
-from tax_rules import get_tax_rates
-from models import build_order_document
-from db import get_db_collection, get_db_collection_review
-from logger_config import *
 
+from tax_rules import get_tax_rates
+from db import get_db_collection, get_db_collection_review
+from models import build_order_document
 
 logger = logging.getLogger(__name__)
-
+BULK_CHUNK_SIZE = 1000
 
 REQUIRED_COLUMNS = {
     "pedido_id", "produto", "categoria",
     "quantidade", "preco_unitario", "origem", "destino"
 }
 
-def validate_excel_structure(df: pl.DataFrame):
-    """Valida se o DataFrame possui todas as colunas obrigatórias."""
-    existing_cols = set(df.columns)
-    missing = REQUIRED_COLUMNS - existing_cols
+def validate_excel_structure(df: pl.DataFrame) -> None:
+    """Verifica se todas as colunas obrigatórias estão presentes."""
+    missing = REQUIRED_COLUMNS - set(df.columns)
     if missing:
-        logger.info( f"❌ Excel inválido. Colunas ausentes: {', '.join(missing)}. "
-            f"Esperadas: {', '.join(REQUIRED_COLUMNS)}")
-        raise ValueError(
-            f"❌ Excel inválido. Colunas ausentes: {', '.join(missing)}. "
-            f"Esperadas: {', '.join(REQUIRED_COLUMNS)}"
-        )
+        logger.info(f"❌ Excel inválido. Colunas ausentes: {', '.join(missing)}. "
+                    f"Esperadas: {', '.join(REQUIRED_COLUMNS)}")
+        raise ValueError(f"Excel inválido. Colunas ausentes: {', '.join(missing)}")
     logger.info("✅ Estrutura do Excel validada com sucesso.")
 
 def read_orders(filepath: str) -> list[dict]:
-    """Lê e valida o arquivo Excel utilizando função lazy, retornando como lista de dicionários."""
+    """Lê e valida um Excel, retornando as linhas como lista de dicionários."""
     logger.info(f"📥 Lendo arquivo: {filepath}")
     df = pl.read_excel(filepath)
     validate_excel_structure(df)
     return df.lazy().collect().to_dicts()
 
-
-
 def apply_tax_to_row(row: dict) -> dict:
-    """Aplica as regras tributárias a uma linha de pedido."""
+    """Aplica as regras tributárias e calcula totais."""
     rates, found = get_tax_rates(row["categoria"], row["origem"], row["destino"])
-    gross_value = row["preco_unitario"] * row["quantidade"]
-    ibs_value = gross_value * rates["ibs"]
-    cbs_value = gross_value * rates["cbs"]
-    total_value = gross_value + ibs_value + cbs_value
+    valor_bruto = row["preco_unitario"] * row["quantidade"]
+    valor_ibs = valor_bruto * rates["ibs"]
+    valor_cbs = valor_bruto * rates["cbs"]
     return {
         **row,
-        "valor_bruto": round(gross_value, 2),
-        "valor_ibs": round(ibs_value, 2),
-        "valor_cbs": round(cbs_value, 2),
-        "valor_total": round(total_value, 2),
+        "valor_bruto": round(valor_bruto, 2),
+        "valor_ibs": round(valor_ibs, 2),
+        "valor_cbs": round(valor_cbs, 2),
+        "valor_total": round(valor_bruto + valor_ibs + valor_cbs, 2),
         "taxa_localizada": found,
         "status": "processado" if found else "nao processado"
     }
 
-
-def organize_orders(rows: list[dict]) -> tuple[dict, set[str]]:
-    """Agrupa os itens por pedido e define status de cada um."""
-    orders_dict = {}
-    review_set = set()
-
+def group_orders(rows: list[dict]) -> dict[str, dict]:
+    """Agrupa itens por pedido e consolida valores e status."""
+    grouped = {}
     for item in rows:
         pid = item["pedido_id"]
-        if pid not in orders_dict:
-            orders_dict[pid] = {
+        if pid not in grouped:
+            grouped[pid] = {
                 "items": [],
-                "total": 0,
-                "ibs": 0,
-                "cbs": 0,
+                "total": 0.0,
+                "ibs": 0.0,
+                "cbs": 0.0,
                 "status": item["status"]
             }
 
-        orders_dict[pid]["items"].append(item)
-        orders_dict[pid]["total"] += item["valor_bruto"]
-        orders_dict[pid]["ibs"] += item["valor_ibs"]
-        orders_dict[pid]["cbs"] += item["valor_cbs"]
+        grouped[pid]["items"].append(item)
+        grouped[pid]["total"] += item["valor_bruto"]
+        grouped[pid]["ibs"] += item["valor_ibs"]
+        grouped[pid]["cbs"] += item["valor_cbs"]
 
         if item["status"] == "nao processado":
-            orders_dict[pid]["status"] = "nao processado"
-            review_set.add(pid)
+            grouped[pid]["status"] = "nao processado"
 
-    return orders_dict, review_set
+    return grouped
 
-
-
-def persist_orders(orders_dict: dict, review_set: set[str]):
-    """Persiste os pedidos no banco conforme status."""
-    collection = get_db_collection()
-    collection_review = get_db_collection_review()
+def persist_orders(orders_dict: dict[str, dict]) -> None:
+    """Persiste pedidos no MongoDB com inserção em lote otimizada."""
+    processados, revisao = [], []
 
     for pid, data in orders_dict.items():
-        origem = data["items"][0]["origem"]
-        destino = data["items"][0]["destino"]
-        status = data["status"]
-
         doc = build_order_document(
             order_id=pid,
             items=data["items"],
             total=round(data["total"], 2),
-            destino=destino,
-            origem=origem,
-            impostos={"ibs": round(data["ibs"], 2), "cbs": round(data["cbs"], 2)},
-            status=status
+            destino=data["items"][0]["destino"],
+            origem=data["items"][0]["origem"],
+            impostos={
+                "ibs": round(data["ibs"], 2),
+                "cbs": round(data["cbs"], 2)
+            },
+            status=data["status"]
         )
+        (processados if data["status"] == "processado" else revisao).append(doc)
 
-        if status == "processado":
-            collection.insert_one(doc)
-            logger.info(f"✅ Pedido {pid} processado e salvo com sucesso.")
-        else:
-            collection_review.insert_one(doc)
-            logger.warning(f"⚠️ Pedido {pid} enviado para revisão (regra tributária ausente).")
+    safe_bulk_insert(get_db_collection(), processados, "processados")
+    safe_bulk_insert(get_db_collection_review(), revisao, "revisão")
 
-    logger.info(f"✔️ Pedidos processados: {len(orders_dict) - len(review_set)}")
-    logger.info(f"❌ Pedidos em revisão: {len(review_set)}")
+    logger.info(f"✔️ Total processados: {len(processados)}")
+    logger.info(f"❌ Total em revisão: {len(revisao)}")
 
+def safe_bulk_insert(collection, documents: list[dict], tipo: str) -> None:
+    """Executa insert_many com chunking e tratamento de erros."""
+    if not documents:
+        return
 
-def process_order_file(filepath: str):
+    logger.info(f"⬆️ Inserindo {len(documents)} pedidos '{tipo}'...")
+    try:
+        for i, chunk in enumerate(chunked(documents, BULK_CHUNK_SIZE), 1):
+            collection.insert_many(chunk, ordered=False)
+            logger.debug(f"📦 Lote {i} de {tipo}: {len(chunk)} docs.")
+        logger.info(f"✅ Pedidos '{tipo}' inseridos com sucesso.")
+    except BulkWriteError as e:
+        logger.error(f"❌ Falha ao inserir pedidos '{tipo}': {e.details}")
+
+def process_order_file(filepath: str) -> None:
     """Pipeline principal de leitura, processamento e persistência de dados.
     📌 Podemos aplicar multithread caso necessário utilizando ProcessPoolExecutor na função apply_tax_to_row
     devemos apenas se atentar com o usage do CPU, sendo necessária uma avaliação mais detalhada."""
 
     raw_rows = read_orders(filepath)
     logger.info(f"📄 Linhas lidas: {len(raw_rows)}")
-    processed_rows = [apply_tax_to_row(row) for row in raw_rows]
-    orders_dict, review_list = organize_orders(processed_rows)
-    persist_orders(orders_dict, review_list)
+    processed = [apply_tax_to_row(row) for row in raw_rows]
+    orders = group_orders(processed)
+    persist_orders(orders)
